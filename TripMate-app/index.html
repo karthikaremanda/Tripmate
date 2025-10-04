@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRIPMATE - MVP</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- LeafletJS for Mapping -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- React -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Simple styling for leaflet map container */
+        .leaflet-container {
+            height: 400px;
+            width: 100%;
+            border-radius: 0.5rem;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div id="root"></div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            onAuthStateChanged, 
+            createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, 
+            signOut
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            setDoc, 
+            getDoc, 
+            collection, 
+            addDoc,
+            query,
+            where,
+            onSnapshot,
+            serverTimestamp,
+            orderBy
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // IMPORTANT: Replace with your actual Firebase project configuration
+         const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "YOUR_API_KEY",
+                authDomain: "YOUR_AUTH_DOMAIN",
+                projectId: "YOUR_PROJECT_ID",
+                storageBucket: "YOUR_STORAGE_BUCKET",
+                messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+                appId: "YOUR_APP_ID"
+            };
+        
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Make Firebase services available to React components
+        window.firebaseServices = {
+            auth, db, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, 
+            doc, setDoc, getDoc, collection, addDoc, query, where, onSnapshot, serverTimestamp,
+            orderBy
+        };
+    </script>
+
+    <!-- React App -->
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const fb = window.firebaseServices;
+
+        // --- SVG Icons ---
+        const CarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 mr-2 text-slate-500"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><path d="M10 17h4"/><path d="M5 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M19 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/></svg>;
+        const UsersIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 mr-2 text-slate-500"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
+        const ClockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 mr-2 text-slate-500"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+        const NoteIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 mr-2 text-slate-500"><path d="M12 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+        const PinIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-slate-400 mr-3 shrink-0"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>;
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [userRole, setUserRole] = useState(null);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                if (!fb) { setLoading(false); return; }
+                
+                const unsubscribe = fb.onAuthStateChanged(fb.auth, async (currentUser) => {
+                    if (currentUser) {
+                        const userDocRef = fb.doc(fb.db, "users", currentUser.uid);
+                        const userDoc = await fb.getDoc(userDocRef);
+                        setUserRole(userDoc.exists() ? userDoc.data().role : null);
+                        setUser(currentUser);
+                    } else {
+                        setUser(null);
+                        setUserRole(null);
+                    }
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            const handleLogout = () => fb.signOut(fb.auth);
+
+            if (loading) {
+                return <div className="flex items-center justify-center min-h-screen"><div className="text-xl font-semibold text-slate-600">Loading Application...</div></div>;
+            }
+            
+            return (
+                <div className="min-h-screen">
+                    <header className="bg-white/80 backdrop-blur-lg shadow-sm p-4 flex justify-between items-center sticky top-0 z-40">
+                        <div className="flex items-center space-x-3">
+                           <svg className="h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 18a4.9 4.9 0 0 1 4.9-4.9h6.2a4.9 4.9 0 0 1 4.9 4.9v2.1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1Z"/><path d="M5 18v-2.1a1 1 0 0 1 .5-.9l4-2.4a1 1 0 0 1 1 0l4 2.4a1 1 0 0 1 .5.9V18"/><path d="M12 2a1 1 0 0 1 1 1v4a1 1 0 0 1-2 0V3a1 1 0 0 1 1-1Z"/></svg>
+                            <h1 className="text-2xl font-bold text-slate-800">TRIPMATE</h1>
+                        </div>
+                        {user && <button onClick={handleLogout} className="px-4 py-2 bg-slate-700 text-white font-semibold rounded-lg hover:bg-slate-800 transition-colors shadow-sm">Logout</button>}
+                    </header>
+                    <main className="p-4 sm:p-6 lg:p-8">
+                        {!user ? <AuthPage />
+                        : userRole === 'traveler' ? <TravelerDashboard user={user} />
+                        : userRole === 'analyst' ? <AnalystDashboard />
+                        : (
+                           <div className="text-center p-8 bg-white rounded-xl shadow-lg">
+                               <p className="text-lg text-slate-600">Please sign up to select a role.</p>
+                               <button onClick={handleLogout} className="mt-4 px-5 py-2.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm">Go to Sign Up</button>
+                           </div>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+        function AuthPage() {
+            const [isLogin, setIsLogin] = useState(true);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [role, setRole] = useState('traveler');
+            const [error, setError] = useState('');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                try {
+                    if (isLogin) {
+                        await fb.signInWithEmailAndPassword(fb.auth, email, password);
+                    } else {
+                        const userCredential = await fb.createUserWithEmailAndPassword(fb.auth, email, password);
+                        await fb.setDoc(fb.doc(fb.db, "users", userCredential.user.uid), {
+                            email: userCredential.user.email,
+                            role: role,
+                            createdAt: fb.serverTimestamp()
+                        });
+                    }
+                } catch (err) {
+                    setError(err.message);
+                }
+            };
+            
+            return (
+                <div className="max-w-md mx-auto mt-10 bg-white p-8 rounded-lg shadow-xl">
+                    <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">{isLogin ? 'Login' : 'Sign Up'}</h2>
+                    <form onSubmit={handleSubmit}>
+                        <div className="mb-4">
+                            <label className="block text-gray-700 font-semibold mb-2" htmlFor="email">Email</label>
+                            <input type="email" id="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                        </div>
+                        <div className="mb-6">
+                            <label className="block text-gray-700 font-semibold mb-2" htmlFor="password">Password</label>
+                            <input type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                        </div>
+                        {!isLogin && (
+                            <div className="mb-6">
+                                <label className="block text-gray-700 font-semibold mb-2" htmlFor="role">Role</label>
+                                <select id="role" value={role} onChange={(e) => setRole(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="traveler">Traveler</option>
+                                    <option value="analyst">Analyst</option>
+                                </select>
+                            </div>
+                        )}
+                        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
+                        <button type="submit" className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-md hover:bg-blue-700 transition duration-300">
+                            {isLogin ? 'Login' : 'Create Account'}
+                        </button>
+                    </form>
+                    <p className="text-center text-gray-600 mt-6">
+                        {isLogin ? "Don't have an account?" : "Already have an account?"}
+                        <button onClick={() => setIsLogin(!isLogin)} className="text-blue-600 hover:underline font-semibold ml-1">
+                            {isLogin ? 'Sign Up' : 'Login'}
+                        </button>
+                    </p>
+                </div>
+            );
+        }
+
+        function TravelerDashboard({ user }) {
+            const [isTracking, setIsTracking] = useState(false);
+            const [tripPath, setTripPath] = useState([]);
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [pastTrips, setPastTrips] = useState([]);
+            const [queryError, setQueryError] = useState(null); 
+            
+            const [tripPurpose, setTripPurpose] = useState('');
+            const [accompanyingTravelers, setAccompanyingTravelers] = useState(0);
+            const [transportMode, setTransportMode] = useState('Car');
+            const [tripNotes, setTripNotes] = useState('');
+
+            // NEW: State for location names
+            const [startLocationName, setStartLocationName] = useState('');
+            const [endLocationName, setEndLocationName] = useState('');
+            
+            const watchId = useRef(null);
+            const mapRef = useRef(null);
+            const polylineRef = useRef(null);
+
+            useEffect(() => {
+                if (!mapRef.current) {
+                    mapRef.current = L.map('map').setView([17.3850, 78.4867], 13);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    }).addTo(mapRef.current);
+                    navigator.geolocation.getCurrentPosition(position => {
+                        mapRef.current.setView([position.coords.latitude, position.coords.longitude], 15);
+                    });
+                }
+            }, []);
+
+            useEffect(() => {
+                if(!user) return;
+                setQueryError(null); 
+                const q = fb.query(
+                    fb.collection(fb.db, "trips"), 
+                    fb.where("userId", "==", user.uid),
+                    fb.orderBy("startTime", "desc")
+                );
+                const unsubscribe = fb.onSnapshot(q, (querySnapshot) => {
+                    const tripsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setPastTrips(tripsData);
+                }, (error) => {
+                    console.error("Firestore query failed:", error.message);
+                    setQueryError(error.message); 
+                });
+                return () => unsubscribe();
+            }, [user]);
+
+            useEffect(() => {
+                if (mapRef.current) {
+                    if (polylineRef.current) {
+                        polylineRef.current.remove();
+                        polylineRef.current = null;
+                    }
+                    if (tripPath.length > 0) {
+                        polylineRef.current = L.polyline(tripPath, { color: 'red' }).addTo(mapRef.current);
+                        mapRef.current.fitBounds(polylineRef.current.getBounds(), { padding: [20, 20]});
+                    }
+                }
+            }, [tripPath]);
+
+            // NEW: Function to get address from coordinates
+            const fetchLocationName = async (lat, lon) => {
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                    const data = await response.json();
+                    return data.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+                } catch (error) {
+                    console.error("Reverse geocoding failed:", error);
+                    return "Could not fetch address";
+                }
+            };
+            
+            const openSaveModal = async (path) => {
+                if (path.length < 2) return;
+                setIsModalOpen(true);
+                setStartLocationName('Loading...');
+                setEndLocationName('Loading...');
+
+                const startCoords = path[0];
+                const endCoords = path[path.length - 1];
+
+                const startName = await fetchLocationName(startCoords[0], startCoords[1]);
+                setStartLocationName(startName);
+                
+                const endName = await fetchLocationName(endCoords[0], endCoords[1]);
+                setEndLocationName(endName);
+            };
+
+            const handleStartTrip = () => {
+                if (!navigator.geolocation) return;
+                if(polylineRef.current) polylineRef.current.remove();
+                polylineRef.current = null;
+                setTripPath([]);
+                setIsTracking(true);
+                watchId.current = navigator.geolocation.watchPosition(
+                    (position) => setTripPath(prev => [...prev, [position.coords.latitude, position.coords.longitude]]),
+                    (error) => { console.error(error); setIsTracking(false); },
+                    { enableHighAccuracy: true }
+                );
+            };
+
+            const handleEndTrip = () => {
+                if (watchId.current) navigator.geolocation.clearWatch(watchId.current);
+                setIsTracking(false);
+                if (tripPath.length > 1) openSaveModal(tripPath);
+                else setTripPath([]);
+            };
+            
+            const handleCreateDummyTrip = () => {
+                const dummyPath = [
+                    [17.4399, 78.5029], [17.4420, 78.5000], [17.4385, 78.4950],
+                    [17.4350, 78.4900], [17.4295, 78.4800], [17.4241, 78.4736]
+                ];
+                setTripPath(dummyPath);
+                openSaveModal(dummyPath);
+            };
+
+            const handleSaveTrip = async () => {
+                if (!tripPurpose.trim()) { alert('Please enter a trip purpose.'); return; }
+                try {
+                    await fb.addDoc(fb.collection(fb.db, "trips"), {
+                        userId: user.uid,
+                        purpose: tripPurpose,
+                        path: JSON.stringify(tripPath),
+                        startTime: fb.serverTimestamp(),
+                        accompanyingTravelers: parseInt(accompanyingTravelers, 10) || 0,
+                        transportMode: transportMode,
+                        tripNotes: tripNotes,
+                        startLocationName: startLocationName, // NEW
+                        endLocationName: endLocationName,     // NEW
+                    });
+                    setTripPurpose(''); setAccompanyingTravelers(0); setTransportMode('Car'); setTripNotes('');
+                    setIsModalOpen(false); setTripPath([]);
+                } catch (e) { console.error("Error saving trip: ", e); }
+            };
+            
+            return (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
+                        <h2 className="text-2xl font-bold mb-4">My Trip</h2>
+                        <div id="map" className="leaflet-container mb-4"></div>
+                        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+                            {!isTracking ? (
+                                <>
+                                    <button onClick={handleStartTrip} className="flex-1 bg-green-500 text-white font-bold py-3 px-4 rounded-md hover:bg-green-600 transition">Start Trip</button>
+                                    <button onClick={handleCreateDummyTrip} className="flex-1 bg-yellow-500 text-white font-bold py-3 px-4 rounded-md hover:bg-yellow-600 transition">Create Dummy Trip</button>
+                                </>
+                            ) : (
+                                <button onClick={handleEndTrip} className="w-full bg-red-500 text-white font-bold py-3 px-4 rounded-md hover:bg-red-600 transition">End Trip</button>
+                            )}
+                        </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold mb-4">Past Trips</h3>
+                        {queryError ? (
+                            <div className="p-4 bg-red-100 text-red-800 rounded-md border border-red-300">
+                                <p className="font-bold text-lg">Action Required</p>
+                                <p className="text-sm mt-2">Could not load trips. The database needs an index.</p>
+                                <p className="text-sm mt-2">Please open the browser's developer console (F12), find the error message, and click the link inside it to create the required database index.</p>
+                            </div>
+                        ) : (
+                            <ul className="space-y-3 h-96 overflow-y-auto">
+                                {pastTrips.length > 0 ? pastTrips.map(trip => (
+                                    <li key={trip.id} className="p-3 bg-gray-50 rounded-md border">
+                                        <p className="font-semibold text-gray-800">{trip.purpose}</p>
+                                        <p className="text-sm text-gray-500">{new Date(trip.startTime?.seconds * 1000).toLocaleString()}</p>
+                                        <p className="text-sm text-gray-500">{trip.transportMode} - {trip.accompanyingTravelers + 1} person(s)</p>
+                                    </li>
+                                )) : <p className="text-gray-500">No trips recorded yet.</p>}
+                            </ul>
+                        )}
+                    </div>
+
+                    {isModalOpen && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
+                                <h3 className="text-2xl font-bold mb-6">Save Trip Details</h3>
+                                <div className="space-y-4">
+                                    {/* -- NEW: Display for start and end locations -- */}
+                                    <div>
+                                        <label className="block text-gray-700 font-semibold mb-1">From</label>
+                                        <p className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-700">{startLocationName}</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-gray-700 font-semibold mb-1">To</label>
+                                        <p className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-700">{endLocationName}</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-gray-700 font-semibold mb-2" htmlFor="purpose">Trip Purpose*</label>
+                                        <input type="text" id="purpose" value={tripPurpose} onChange={(e) => setTripPurpose(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Commute to work" />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-2" htmlFor="transportMode">Transport Mode</label>
+                                            <select id="transportMode" value={transportMode} onChange={(e) => setTransportMode(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                                <option>Car</option><option>Bus</option><option>Walk</option><option>Train</option><option>Motorcycle</option><option>Auto-rickshaw</option><option>Other</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-gray-700 font-semibold mb-2" htmlFor="travelers">Others With You</label>
+                                            <input type="number" id="travelers" value={accompanyingTravelers} min="0" onChange={(e) => setAccompanyingTravelers(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-gray-700 font-semibold mb-2" htmlFor="notes">Notes/Logs (Optional)</label>
+                                        <textarea id="notes" value={tripNotes} onChange={(e) => setTripNotes(e.target.value)} rows="3" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Heavy traffic on MG Road"></textarea>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end space-x-3 mt-8">
+                                    <button onClick={() => {setIsModalOpen(false); setTripPath([]);}} className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition">Cancel</button>
+                                    <button onClick={handleSaveTrip} className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition font-semibold">Save Trip</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function AnalystDashboard() {
+            const [allTrips, setAllTrips] = useState([]);
+            const [selectedTrip, setSelectedTrip] = useState(null);
+            
+            const mapRef = useRef(null);
+            const polylineRef = useRef(null);
+            
+            useEffect(() => {
+                if (!mapRef.current) {
+                    mapRef.current = L.map('analyst-map').setView([20.5937, 78.9629], 5); // India view
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    }).addTo(mapRef.current);
+                }
+            }, []);
+
+            useEffect(() => {
+                const q = fb.query(fb.collection(fb.db, "trips"), fb.orderBy("startTime", "desc"));
+                const unsubscribe = fb.onSnapshot(q, (querySnapshot) => {
+                    const tripsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setAllTrips(tripsData);
+                }, (error) => {
+                    console.error("Firestore query failed:", error.message);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (mapRef.current && selectedTrip && selectedTrip.path) {
+                    try {
+                        const parsedPath = typeof selectedTrip.path === 'string' ? JSON.parse(selectedTrip.path) : selectedTrip.path;
+
+                        if (polylineRef.current) polylineRef.current.remove();
+                        polylineRef.current = L.polyline(parsedPath, { color: 'blue' }).addTo(mapRef.current);
+                        mapRef.current.fitBounds(polylineRef.current.getBounds(), { padding: [50, 50] });
+                    } catch (e) {
+                        console.error("Failed to parse trip path:", e);
+                    }
+                }
+            }, [selectedTrip]);
+
+            return (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-md">
+                        <h2 className="text-2xl font-bold mb-4">Trip Analysis</h2>
+                        <div id="analyst-map" className="leaflet-container"></div>
+                        {selectedTrip && (
+                            <div className="mt-4 p-4 bg-gray-50 rounded-md border space-y-2">
+                                <h4 className="text-lg font-bold">Selected Trip Details</h4>
+                                {/* -- NEW: Display for start and end locations -- */}
+                                {selectedTrip.startLocationName && <p><strong>From:</strong> {selectedTrip.startLocationName}</p>}
+                                {selectedTrip.endLocationName && <p><strong>To:</strong> {selectedTrip.endLocationName}</p>}
+                                <p><strong>Purpose:</strong> {selectedTrip.purpose}</p>
+                                <p><strong>Date:</strong> {new Date(selectedTrip.startTime?.seconds * 1000).toLocaleString()}</p>
+                                <p><strong>Transport Mode:</strong> {selectedTrip.transportMode || 'N/A'}</p>
+                                <p><strong>Total People:</strong> {(selectedTrip.accompanyingTravelers || 0) + 1}</p>
+                                {selectedTrip.tripNotes && <p><strong>Notes:</strong> <span className="italic text-gray-700">{selectedTrip.tripNotes}</span></p>}
+                                <p><strong>User ID:</strong> <span className="text-xs font-mono">{selectedTrip.userId}</span></p>
+                            </div>
+                        )}
+                    </div>
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold mb-4">All Recorded Trips</h3>
+                        <ul className="space-y-3 h-[500px] overflow-y-auto">
+                           {allTrips.length > 0 ? allTrips.map(trip => (
+                                <li key={trip.id} onClick={() => setSelectedTrip(trip)} className={`p-3 rounded-md border cursor-pointer hover:bg-blue-100 hover:border-blue-300 transition ${selectedTrip?.id === trip.id ? 'bg-blue-100 border-blue-400' : 'bg-gray-50'}`}>
+                                    <p className="font-semibold text-gray-800">{trip.purpose}</p>
+                                    <p className="text-sm text-gray-500">{new Date(trip.startTime?.seconds * 1000).toLocaleDateString()}</p>
+                                    <p className="text-xs text-gray-400 truncate">User: {trip.userId}</p>
+                                </li>
+                            )) : <p className="text-gray-500">No trips recorded yet.</p>}
+                        </ul>
+                    </div>
+                </div>
+            );
+        }
+        
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
+</body>
+</html>
+
