@@ -53,7 +53,7 @@ git clone [https://github.com/karthikaremanda/Tripmate.git](https://github.com/k
 
 Navigate to the Folder:
 
-cd Tripmate
+cd TripMate-app
 
 Firebase Setup:
 
